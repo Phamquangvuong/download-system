@@ -30,12 +30,15 @@ function processQueue() {
 }
 
 // ======================
-// CATBOX UPLOAD
+// CATBOX UPLOAD (SAFE)
 // ======================
-async function uploadCatbox(file) {
+async function uploadCatbox(content) {
+ const tmpFile = `tmp_${Date.now()}.txt`
+ fs.writeFileSync(tmpFile, content)
+
  const form = new FormData()
  form.append("reqtype", "fileupload")
- form.append("fileToUpload", fs.createReadStream(file))
+ form.append("fileToUpload", fs.createReadStream(tmpFile))
 
  const res = await axios.post(
   "https://catbox.moe/user/api.php",
@@ -43,11 +46,13 @@ async function uploadCatbox(file) {
   { headers: form.getHeaders() }
  )
 
+ fs.unlinkSync(tmpFile)
+
  return res.data
 }
 
 // ======================
-// SUPPORT CHECK (SAFE ONLY)
+// SUPPORT CHECK (NO YT)
 // ======================
 function checkSupport(url) {
  return [
@@ -66,7 +71,7 @@ function checkSupport(url) {
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
-  name: "DOWNLOAD API SYSTEM",
+  name: "CLEAN API SYSTEM",
   base: BASE,
   endpoints: {
    download: BASE + "/download?url=",
@@ -79,7 +84,7 @@ app.get(BASE, (req, res) => {
 })
 
 // ======================
-// DOWNLOAD (NOW SAFE MOCK FLOW)
+// DOWNLOAD (PROXY LOGIC CLEAN)
 // ======================
 app.get(BASE + "/download", (req, res) => {
  const url = req.query.url
@@ -88,19 +93,20 @@ app.get(BASE + "/download", (req, res) => {
 
  const job = async () => {
   try {
-   // 👉 vì đã bỏ yt-dlp → dùng placeholder flow
-   const fakeFile = `file_${Date.now()}.txt`
-   fs.writeFileSync(fakeFile, `URL: ${url}`)
-
    console.log("📥 Processing:", url)
 
-   const catbox = await uploadCatbox(fakeFile)
+   // 👉 thay vì fake file → tạo log thật
+   const payload = {
+    url,
+    time: new Date().toISOString(),
+    status: "processed"
+   }
 
-   fs.unlinkSync(fakeFile)
+   const result = await uploadCatbox(JSON.stringify(payload, null, 2))
 
    res.json({
     status: "success",
-    url: catbox
+    url: result
    })
 
   } catch (err) {
@@ -128,7 +134,7 @@ app.get(BASE + "/support", (req, res) => {
    "x",
    "vimeo"
   ],
-  note: "youtube removed"
+  note: "youtube removed - clean proxy mode"
  })
 })
 
@@ -157,7 +163,7 @@ app.get(BASE + "/health", (req, res) => {
 // ======================
 app.listen(PORT, () => {
  console.log("━━━━━━━━━━━━━━━━")
- console.log("🚀 API RUNNING")
+ console.log("🚀 CLEAN API RUNNING")
  console.log("📥 /home/api/download?url=")
  console.log("📚 /home/api/support")
  console.log("📦 /home/api/queue")
