@@ -112,39 +112,23 @@ app.get(BASE, (req, res) => {
 app.get(BASE + "/download", async (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
 
- if (!url) return res.json({ status: "error", message: "no url" })
- if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported" })
+ if (!url) return res.json({ status: "error" })
 
  const file = `video_${Date.now()}.mp4`
 
  try {
-  console.log("📥 Download:", url)
-
   await downloadVideo(url, file)
-
-  console.log("☁️ Upload...")
-
   const result = await uploadCatbox(file)
 
   if (fs.existsSync(file)) fs.unlinkSync(file)
 
-  return res.json({
-   status: "success",
-   url: result
-  })
+  return res.json({ status: "success", url: result })
 
- } catch (err) {
-  console.log("❌ ERROR:", err)
-
+ } catch (e) {
   if (fs.existsSync(file)) fs.unlinkSync(file)
-
-  return res.json({
-   status: "error",
-   message: String(err)
-  })
- })
+  return res.json({ status: "error", message: String(e) })
+ }
 })
-
 // ======================
 // SUPPORT
 // ======================
