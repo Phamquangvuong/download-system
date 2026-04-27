@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// YT-DLP PATH SAFE
+// GET YT-DLP PATH SAFE
 // ======================
 function getYtDlp() {
  try {
@@ -40,7 +40,7 @@ function checkSupport(url) {
 }
 
 // ======================
-// DOWNLOAD VIDEO
+// DOWNLOAD CORE (FIXED YOUTUBE)
 // ======================
 function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
@@ -48,8 +48,19 @@ function downloadVideo(url, file) {
    "-f", "bv*+ba/b",
    "--merge-output-format", "mp4",
    "--no-playlist",
+
+   // 🍪 COOKIE FIX
+   "--cookies", "cookies.txt",
+
+   // 🔥 BYPASS YOUTUBE BOT CHECK
+   "--extractor-args",
+   "youtube:player_client=android,player_skip=webpage",
+
+   // ⚡ STABILITY
+   "--user-agent", "Mozilla/5.0",
    "--geo-bypass",
    "--retries", "10",
+
    "-o", file,
    url
   ])
@@ -61,7 +72,7 @@ function downloadVideo(url, file) {
 
   yt.on("close", code => {
    if (code === 0) resolve()
-   else reject("download failed")
+   else reject("yt-dlp failed with code " + code)
   })
  })
 }
@@ -84,7 +95,7 @@ async function uploadCatbox(file) {
 }
 
 // ======================
-// ROOT
+// ROOT API (FULL ENDPOINT)
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
@@ -100,19 +111,15 @@ app.get(BASE, (req, res) => {
   }
  })
 })
+
 // ======================
-// DIRECT DOWNLOAD (NO QUEUE, NO ID)
+// DOWNLOAD ROUTE
 // ======================
 app.get(BASE + "/download", async (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
 
- if (!url) {
-  return res.json({ status: "error", msg: "no url" })
- }
-
- if (!checkSupport(url)) {
-  return res.json({ status: "error", msg: "unsupported" })
- }
+ if (!url) return res.json({ status: "error", message: "no url" })
+ if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported url" })
 
  const file = `video_${Date.now()}.mp4`
 
@@ -121,11 +128,11 @@ app.get(BASE + "/download", async (req, res) => {
 
   await downloadVideo(url, file)
 
-  console.log("☁️ Upload...")
+  console.log("☁️ Uploading...")
 
   const result = await uploadCatbox(file)
 
-  fs.unlinkSync(file)
+  if (fs.existsSync(file)) fs.unlinkSync(file)
 
   return res.json({
    status: "success",
@@ -145,9 +152,42 @@ app.get(BASE + "/download", async (req, res) => {
 })
 
 // ======================
+// SUPPORT
+// ======================
+app.get(BASE + "/support", (req, res) => {
+ res.json({
+  supported: [
+   "youtube",
+   "tiktok",
+   "instagram",
+   "facebook",
+   "twitter",
+   "vimeo"
+  ],
+  features: {
+   cookies: true,
+   android_client: true,
+   mp4: true,
+   ffmpeg_merge: true
+  }
+ })
+})
+
+// ======================
+// HEALTH CHECK
+// ======================
+app.get(BASE + "/health", (req, res) => {
+ res.json({
+  status: "online",
+  uptime: process.uptime()
+ })
+})
+
+// ======================
 app.listen(PORT, () => {
- console.log("━━━━━━━━━━━━━━━━")
- console.log("🚀 DIRECT API MODE")
+ console.log("━━━━━━━━━━━━━━━━━━━━")
+ console.log("🚀 PRODUCTION VIDEO API")
+ console.log("🍪 cookies + android bypass enabled")
  console.log("📥 /home/api/download?url=")
- console.log("━━━━━━━━━━━━━━━━")
+ console.log("━━━━━━━━━━━━━━━━━━━━")
 })
