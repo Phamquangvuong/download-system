@@ -88,14 +88,18 @@ async function uploadCatbox(file) {
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
+  dev: "Pham Quang Vuong",
   status: "online",
-  mode: "direct-return",
+  mode: "API DOWNLOAD SYSTEM V1",
+
   endpoints: {
-   download: BASE + "/download?url="
+   download: BASE + "/download?url=",
+   support: BASE + "/support",
+   queue: BASE + "/queue",
+   health: BASE + "/health"
   }
  })
 })
-
 // ======================
 // DIRECT DOWNLOAD (NO QUEUE, NO ID)
 // ======================
