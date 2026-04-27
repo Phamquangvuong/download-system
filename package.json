@@ -1,13 +1,9 @@
 {
   "name": "video-api",
   "version": "1.0.0",
-  "description": "Clean API backend (no youtube, no ffmpeg)",
   "main": "server.js",
   "scripts": {
     "start": "node api.js"
-  },
-  "engines": {
-    "node": ">=18"
   },
   "dependencies": {
     "axios": "^1.6.0",
