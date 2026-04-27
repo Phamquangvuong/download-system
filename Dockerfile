@@ -7,15 +7,10 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     ca-certificates
 
-# install yt-dlp
 RUN pip3 install --no-cache-dir yt-dlp
 
-# 🔥 FIX QUAN TRỌNG: add PATH đúng chỗ pip install
+# FIX PATH chuẩn render
 ENV PATH="/root/.local/bin:$PATH"
-
-# verify (FAIL BUILD nếu chưa có)
-RUN yt-dlp --version
-RUN ffmpeg -version
 
 WORKDIR /app
 
