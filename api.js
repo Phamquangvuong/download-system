@@ -96,7 +96,7 @@ app.get(BASE, (req, res) => {
  res.json({
   dev: "Pham Quang Vuong",
   status: "online",
-  mode: "PRODUCTION VIDEO API",
+  mode: "API DOWNLOAD SYSTEM V1",
 
   endpoints: {
    download: BASE + "/download?url=",
