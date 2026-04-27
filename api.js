@@ -10,48 +10,35 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// QUEUE SYSTEM (STABLE)
+// QUEUE SYSTEM
 // ======================
 let queue = []
 let running = false
 
 function processQueue() {
  if (running) return
- if (queue.length === 0) return
+ if (!queue.length) return
 
  const job = queue.shift()
  running = true
 
- job().finally(() => {
-  running = false
-  processQueue()
- })
+ Promise.resolve(job())
+  .catch(err => console.log("QUEUE ERROR:", err))
+  .finally(() => {
+   running = false
+   processQueue()
+  })
 }
 
 // ======================
-// CLEAN URL
+// CLEAN URL (FIX ENCODE ISSUE)
 // ======================
-function cleanURL(url) {
- try {
-  const u = new URL(url)
-
-  if (u.hostname.includes("youtube.com")) {
-   const id = u.searchParams.get("v")
-   if (id) return "https://www.youtube.com/watch?v=" + id
-  }
-
-  if (url.includes("facebook.com/share")) {
-   return url.replace("facebook.com/share/v", "facebook.com/reel")
-  }
-
-  return url
- } catch {
-  return url
- }
+function getUrl(req) {
+ return decodeURIComponent(req.query.url || "")
 }
 
 // ======================
-// DOWNLOAD VIDEO (YT-DLP)
+// DOWNLOAD (yt-dlp)
 // ======================
 function download(url, file) {
  return new Promise((resolve, reject) => {
@@ -63,19 +50,17 @@ function download(url, file) {
    "--retries", "10",
    "-o", file,
    url
-  ])
-
-  yt.stderr.on("data", d => process.stdout.write(d))
+  ], { stdio: "inherit" })
 
   yt.on("close", code => {
    if (code === 0) resolve()
-   else reject("download failed")
+   else reject("yt-dlp failed")
   })
  })
 }
 
 // ======================
-// CATBOX UPLOAD
+// UPLOAD CATBOX
 // ======================
 async function uploadCatbox(file) {
  const form = new FormData()
@@ -96,26 +81,24 @@ async function uploadCatbox(file) {
 // ======================
 function checkSupport(url) {
  return [
-  "youtube.com",
-  "youtu.be",
   "tiktok.com",
   "instagram.com",
   "facebook.com",
   "fb.watch",
   "twitter.com",
   "x.com",
-  "vimeo.com"
+  "vimeo.com",
+  "youtube.com",
+  "youtu.be"
  ].some(d => url.includes(d))
 }
 
 // ======================
-// ROUTES
+// ROOT API
 // ======================
-
-// 📥 DOWNLOAD
 app.get(BASE, (req, res) => {
  res.json({
-  name: "DOWNLOAD API SYSTEM BY QVUONG",
+  name: "FULL VIDEO API SYSTEM",
   base: BASE,
   endpoints: {
    download: BASE + "/download?url=",
@@ -123,25 +106,31 @@ app.get(BASE, (req, res) => {
    queue: BASE + "/queue",
    health: BASE + "/health"
   },
-  example: {
-   download: "GET " + BASE + "/download?url=https://..."
-  },
   status: "online"
  })
 })
+
+// ======================
+// DOWNLOAD ROUTE
+// ======================
 app.get(BASE + "/download", (req, res) => {
- const url = req.query.url
- if (!url) return res.json({ status: "error", message: "no url" })
- if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported" })
+ const url = getUrl(req)
+
+ if (!url) {
+  return res.json({ status: "error", message: "no url" })
+ }
+
+ if (!checkSupport(url)) {
+  return res.json({ status: "error", message: "unsupported platform" })
+ }
+
+ const file = "video_" + Date.now() + ".mp4"
 
  const job = async () => {
   try {
-   const clean = cleanURL(url)
-   const file = "video_" + Date.now() + ".mp4"
+   console.log("📥 Download:", url)
 
-   console.log("⬇️ Download:", clean)
-
-   await download(clean, file)
+   await download(url, file)
 
    console.log("☁️ Uploading...")
 
@@ -156,6 +145,7 @@ app.get(BASE + "/download", (req, res) => {
 
   } catch (err) {
    console.log("❌ ERROR:", err)
+
    res.json({
     status: "error",
     message: String(err)
@@ -167,22 +157,33 @@ app.get(BASE + "/download", (req, res) => {
  processQueue()
 })
 
-// 📚 SUPPORT
+// ======================
+// SUPPORT API
+// ======================
 app.get(BASE + "/support", (req, res) => {
  res.json({
   supported: [
-   "youtube", "tiktok", "instagram",
-   "facebook", "twitter", "x", "vimeo"
+   "tiktok",
+   "instagram",
+   "facebook",
+   "twitter",
+   "x",
+   "vimeo",
+   "youtube"
   ],
   features: {
+   download: true,
    queue: true,
-   upload: "catbox",
-   auto_fix_url: true
+   ffmpeg: true,
+   yt_dlp: true,
+   catbox: true
   }
  })
 })
 
-// 📦 QUEUE STATUS
+// ======================
+// QUEUE STATUS
+// ======================
 app.get(BASE + "/queue", (req, res) => {
  res.json({
   waiting: queue.length,
@@ -190,7 +191,9 @@ app.get(BASE + "/queue", (req, res) => {
  })
 })
 
-// ❤️ HEALTH
+// ======================
+// HEALTH CHECK
+// ======================
 app.get(BASE + "/health", (req, res) => {
  res.json({
   status: "online",
@@ -199,14 +202,14 @@ app.get(BASE + "/health", (req, res) => {
 })
 
 // ======================
-// START
+// START SERVER
 // ======================
 app.listen(PORT, () => {
- console.log("━━━━━━━━━━━━━━━━")
- console.log("🚀 RENDER API RUNNING")
+ console.log("━━━━━━━━━━━━━━━━━━━━")
+ console.log("🚀 FULL API RUNNING")
  console.log("📥 /home/api/download?url=")
  console.log("📚 /home/api/support")
  console.log("📦 /home/api/queue")
  console.log("❤️ /home/api/health")
- console.log("━━━━━━━━━━━━━━━━")
+ console.log("━━━━━━━━━━━━━━━━━━━━")
 })
