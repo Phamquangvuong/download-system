@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// GET YT-DLP PATH SAFE
+// YT-DLP PATH SAFE
 // ======================
 function getYtDlp() {
  try {
@@ -23,7 +23,7 @@ function getYtDlp() {
 const YTDLP = getYtDlp()
 
 // ======================
-// CHECK SUPPORT
+// SUPPORT CHECK
 // ======================
 function checkSupport(url) {
  return [
@@ -40,24 +40,19 @@ function checkSupport(url) {
 }
 
 // ======================
-// DOWNLOAD CORE (FIXED YOUTUBE)
+// DOWNLOAD FIXED (PRO)
 // ======================
 function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
   const yt = spawn(YTDLP, [
-   "-f", "bv*+ba/b",
+   "-f", "bestvideo+bestaudio/best",
    "--merge-output-format", "mp4",
-   "--no-playlist",
 
-   // 🍪 COOKIE FIX
    "--cookies", "cookies.txt",
+   "--extractor-args", "youtube:player_client=android",
 
-   // 🔥 BYPASS YOUTUBE BOT CHECK
-   "--extractor-args",
-   "youtube:player_client=android,player_skip=webpage",
-
-   // ⚡ STABILITY
    "--user-agent", "Mozilla/5.0",
+   "--no-check-certificates",
    "--geo-bypass",
    "--retries", "10",
 
@@ -72,13 +67,13 @@ function downloadVideo(url, file) {
 
   yt.on("close", code => {
    if (code === 0) resolve()
-   else reject("yt-dlp failed with code " + code)
+   else reject("yt-dlp exit code: " + code)
   })
  })
 }
 
 // ======================
-// UPLOAD CATBOX
+// CATBOX UPLOAD
 // ======================
 async function uploadCatbox(file) {
  const form = new FormData()
@@ -95,31 +90,30 @@ async function uploadCatbox(file) {
 }
 
 // ======================
-// ROOT API (FULL ENDPOINT)
+// ROOT (FULL ENDPOINT)
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
   dev: "Pham Quang Vuong",
   status: "online",
-  mode: "API DOWNLOAD SYSTEM V1",
+  mode: "PRODUCTION VIDEO API",
 
   endpoints: {
    download: BASE + "/download?url=",
    support: BASE + "/support",
-   queue: BASE + "/queue",
    health: BASE + "/health"
   }
  })
 })
 
 // ======================
-// DOWNLOAD ROUTE
+// DOWNLOAD API
 // ======================
 app.get(BASE + "/download", async (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
 
  if (!url) return res.json({ status: "error", message: "no url" })
- if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported url" })
+ if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported" })
 
  const file = `video_${Date.now()}.mp4`
 
@@ -128,7 +122,7 @@ app.get(BASE + "/download", async (req, res) => {
 
   await downloadVideo(url, file)
 
-  console.log("☁️ Uploading...")
+  console.log("☁️ Upload...")
 
   const result = await uploadCatbox(file)
 
@@ -148,7 +142,7 @@ app.get(BASE + "/download", async (req, res) => {
    status: "error",
    message: String(err)
   })
- }
+ })
 })
 
 // ======================
@@ -156,25 +150,17 @@ app.get(BASE + "/download", async (req, res) => {
 // ======================
 app.get(BASE + "/support", (req, res) => {
  res.json({
-  supported: [
-   "youtube",
-   "tiktok",
-   "instagram",
-   "facebook",
-   "twitter",
-   "vimeo"
-  ],
+  supported: ["youtube","tiktok","instagram","facebook","twitter","vimeo"],
   features: {
-   cookies: true,
-   android_client: true,
    mp4: true,
-   ffmpeg_merge: true
+   cookies: true,
+   yt_dlp: true
   }
  })
 })
 
 // ======================
-// HEALTH CHECK
+// HEALTH
 // ======================
 app.get(BASE + "/health", (req, res) => {
  res.json({
@@ -186,8 +172,7 @@ app.get(BASE + "/health", (req, res) => {
 // ======================
 app.listen(PORT, () => {
  console.log("━━━━━━━━━━━━━━━━━━━━")
- console.log("🚀 PRODUCTION VIDEO API")
- console.log("🍪 cookies + android bypass enabled")
+ console.log("🚀 VIDEO API READY")
  console.log("📥 /home/api/download?url=")
  console.log("━━━━━━━━━━━━━━━━━━━━")
 })
