@@ -2,6 +2,7 @@ const express = require("express")
 const fs = require("fs")
 const axios = require("axios")
 const FormData = require("form-data")
+const { spawn } = require("child_process")
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -9,36 +10,77 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// QUEUE SYSTEM (SAFE)
+// QUEUE SYSTEM (STABLE)
 // ======================
 let queue = []
 let running = false
 
 function processQueue() {
  if (running) return
- if (!queue.length) return
+ if (queue.length === 0) return
 
  const job = queue.shift()
  running = true
 
- Promise.resolve(job())
-  .catch(err => console.log("QUEUE ERROR:", err))
-  .finally(() => {
-   running = false
-   processQueue()
-  })
+ job().finally(() => {
+  running = false
+  processQueue()
+ })
 }
 
 // ======================
-// CATBOX UPLOAD (SAFE)
+// CLEAN URL
 // ======================
-async function uploadCatbox(content) {
- const tmpFile = `tmp_${Date.now()}.txt`
- fs.writeFileSync(tmpFile, content)
+function cleanURL(url) {
+ try {
+  const u = new URL(url)
 
+  if (u.hostname.includes("youtube.com")) {
+   const id = u.searchParams.get("v")
+   if (id) return "https://www.youtube.com/watch?v=" + id
+  }
+
+  if (url.includes("facebook.com/share")) {
+   return url.replace("facebook.com/share/v", "facebook.com/reel")
+  }
+
+  return url
+ } catch {
+  return url
+ }
+}
+
+// ======================
+// DOWNLOAD VIDEO (YT-DLP)
+// ======================
+function download(url, file) {
+ return new Promise((resolve, reject) => {
+  const yt = spawn("yt-dlp", [
+   "-f", "bv*+ba/b",
+   "--merge-output-format", "mp4",
+   "--no-playlist",
+   "--geo-bypass",
+   "--retries", "10",
+   "-o", file,
+   url
+  ])
+
+  yt.stderr.on("data", d => process.stdout.write(d))
+
+  yt.on("close", code => {
+   if (code === 0) resolve()
+   else reject("download failed")
+  })
+ })
+}
+
+// ======================
+// CATBOX UPLOAD
+// ======================
+async function uploadCatbox(file) {
  const form = new FormData()
  form.append("reqtype", "fileupload")
- form.append("fileToUpload", fs.createReadStream(tmpFile))
+ form.append("fileToUpload", fs.createReadStream(file))
 
  const res = await axios.post(
   "https://catbox.moe/user/api.php",
@@ -46,16 +88,16 @@ async function uploadCatbox(content) {
   { headers: form.getHeaders() }
  )
 
- fs.unlinkSync(tmpFile)
-
  return res.data
 }
 
 // ======================
-// SUPPORT CHECK (NO YT)
+// SUPPORT CHECK
 // ======================
 function checkSupport(url) {
  return [
+  "youtube.com",
+  "youtu.be",
   "tiktok.com",
   "instagram.com",
   "facebook.com",
@@ -67,11 +109,13 @@ function checkSupport(url) {
 }
 
 // ======================
-// ROOT API
+// ROUTES
 // ======================
+
+// 📥 DOWNLOAD
 app.get(BASE, (req, res) => {
  res.json({
-  name: "CLEAN API SYSTEM",
+  name: "DOWNLOAD API SYSTEM BY QVUONG",
   base: BASE,
   endpoints: {
    download: BASE + "/download?url=",
@@ -79,37 +123,39 @@ app.get(BASE, (req, res) => {
    queue: BASE + "/queue",
    health: BASE + "/health"
   },
+  example: {
+   download: "GET " + BASE + "/download?url=https://..."
+  },
   status: "online"
  })
 })
-
-// ======================
-// DOWNLOAD (PROXY LOGIC CLEAN)
-// ======================
 app.get(BASE + "/download", (req, res) => {
  const url = req.query.url
  if (!url) return res.json({ status: "error", message: "no url" })
- if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported platform" })
+ if (!checkSupport(url)) return res.json({ status: "error", message: "unsupported" })
 
  const job = async () => {
   try {
-   console.log("📥 Processing:", url)
+   const clean = cleanURL(url)
+   const file = "video_" + Date.now() + ".mp4"
 
-   // 👉 thay vì fake file → tạo log thật
-   const payload = {
-    url,
-    time: new Date().toISOString(),
-    status: "processed"
-   }
+   console.log("⬇️ Download:", clean)
 
-   const result = await uploadCatbox(JSON.stringify(payload, null, 2))
+   await download(clean, file)
+
+   console.log("☁️ Uploading...")
+
+   const catbox = await uploadCatbox(file)
+
+   fs.unlinkSync(file)
 
    res.json({
     status: "success",
-    url: result
+    url: catbox
    })
 
   } catch (err) {
+   console.log("❌ ERROR:", err)
    res.json({
     status: "error",
     message: String(err)
@@ -121,26 +167,22 @@ app.get(BASE + "/download", (req, res) => {
  processQueue()
 })
 
-// ======================
-// SUPPORT
-// ======================
+// 📚 SUPPORT
 app.get(BASE + "/support", (req, res) => {
  res.json({
   supported: [
-   "tiktok",
-   "instagram",
-   "facebook",
-   "twitter",
-   "x",
-   "vimeo"
+   "youtube", "tiktok", "instagram",
+   "facebook", "twitter", "x", "vimeo"
   ],
-  note: "youtube removed - clean proxy mode"
+  features: {
+   queue: true,
+   upload: "catbox",
+   auto_fix_url: true
+  }
  })
 })
 
-// ======================
-// QUEUE STATUS
-// ======================
+// 📦 QUEUE STATUS
 app.get(BASE + "/queue", (req, res) => {
  res.json({
   waiting: queue.length,
@@ -148,9 +190,7 @@ app.get(BASE + "/queue", (req, res) => {
  })
 })
 
-// ======================
-// HEALTH
-// ======================
+// ❤️ HEALTH
 app.get(BASE + "/health", (req, res) => {
  res.json({
   status: "online",
@@ -163,7 +203,7 @@ app.get(BASE + "/health", (req, res) => {
 // ======================
 app.listen(PORT, () => {
  console.log("━━━━━━━━━━━━━━━━")
- console.log("🚀 CLEAN API RUNNING")
+ console.log("🚀 RENDER API RUNNING")
  console.log("📥 /home/api/download?url=")
  console.log("📚 /home/api/support")
  console.log("📦 /home/api/queue")
