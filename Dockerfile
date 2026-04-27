@@ -5,15 +5,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates
 
-# 🔥 INSTALL YT-DLP BINARY (KHÔNG DÙNG PIP)
+# install yt-dlp binary
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
     -o /usr/local/bin/yt-dlp
 
 RUN chmod a+rx /usr/local/bin/yt-dlp
-
-# verify
-RUN yt-dlp --version
-RUN ffmpeg -version
 
 WORKDIR /app
 
@@ -21,5 +17,8 @@ COPY package.json .
 RUN npm install
 
 COPY . .
+
+# copy cookies
+COPY cookies.txt .
 
 CMD ["node", "api.js"]
