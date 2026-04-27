@@ -3,6 +3,7 @@ const fs = require("fs")
 const axios = require("axios")
 const FormData = require("form-data")
 const { spawn } = require("child_process")
+const { execSync } = require("child_process")
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -10,7 +11,21 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// QUEUE SAFE
+// FIND YT-DLP AUTO PATH (FIX ENOENT)
+// ======================
+function getYtDlpPath() {
+ try {
+  const path = execSync("which yt-dlp").toString().trim()
+  if (path) return path
+ } catch (e) {}
+
+ return "yt-dlp" // fallback
+}
+
+const YTDLP = getYtDlpPath()
+
+// ======================
+// QUEUE SYSTEM SAFE
 // ======================
 let queue = []
 let running = false
@@ -31,11 +46,11 @@ function processQueue() {
 }
 
 // ======================
-// DOWNLOAD MP4 (YT-DLP + FFMPEG)
+// DOWNLOAD MP4 (FIXED)
 // ======================
 function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
-  const yt = spawn("yt-dlp", [
+  const yt = spawn(YTDLP, [
    "-f", "bv*+ba/b",
    "--merge-output-format", "mp4",
    "--no-playlist",
@@ -56,9 +71,9 @@ function downloadVideo(url, file) {
 }
 
 // ======================
-// UPLOAD CATBOX
+// CATBOX UPLOAD
 // ======================
-async function upload(file) {
+async function uploadCatbox(file) {
  const form = new FormData()
  form.append("reqtype", "fileupload")
  form.append("fileToUpload", fs.createReadStream(file))
@@ -73,9 +88,9 @@ async function upload(file) {
 }
 
 // ======================
-// SUPPORT
+// SUPPORT CHECK
 // ======================
-function check(url) {
+function checkSupport(url) {
  return [
   "tiktok.com",
   "instagram.com",
@@ -94,8 +109,9 @@ function check(url) {
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
-  name: "MP4 DOWNLOAD API",
+  name: "MP4 API SYSTEM",
   status: "online",
+  yt_dlp_path: YTDLP,
   endpoints: {
    download: BASE + "/download?url=",
    support: BASE + "/support",
@@ -106,13 +122,13 @@ app.get(BASE, (req, res) => {
 })
 
 // ======================
-// DOWNLOAD MP4 (MAIN)
+// DOWNLOAD
 // ======================
 app.get(BASE + "/download", (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
 
  if (!url) return res.json({ status: "error", msg: "no url" })
- if (!check(url)) return res.json({ status: "error", msg: "unsupported" })
+ if (!checkSupport(url)) return res.json({ status: "error", msg: "unsupported" })
 
  const file = `video_${Date.now()}.mp4`
 
@@ -122,9 +138,9 @@ app.get(BASE + "/download", (req, res) => {
 
    await downloadVideo(url, file)
 
-   console.log("☁️ Uploading...")
+   console.log("☁️ Upload...")
 
-   const result = await upload(file)
+   const result = await uploadCatbox(file)
 
    fs.unlinkSync(file)
 
@@ -161,7 +177,7 @@ app.get(BASE + "/support", (req, res) => {
   ],
   features: {
    mp4: true,
-   ffmpeg_merge: true,
+   ffmpeg: true,
    yt_dlp: true,
    queue: true
   }
@@ -179,7 +195,7 @@ app.get(BASE + "/queue", (req, res) => {
 })
 
 // ======================
-// HEALTH CHECK
+// HEALTH
 // ======================
 app.get(BASE + "/health", (req, res) => {
  res.json({
@@ -190,6 +206,9 @@ app.get(BASE + "/health", (req, res) => {
 
 // ======================
 app.listen(PORT, () => {
- console.log("🚀 MP4 API RUNNING")
- console.log(BASE + "/download?url=")
+ console.log("━━━━━━━━━━━━━━━━")
+ console.log("🚀 MP4 API READY")
+ console.log("🔧 yt-dlp:", YTDLP)
+ console.log("📥 /home/api/download?url=")
+ console.log("━━━━━━━━━━━━━━━━")
 })
