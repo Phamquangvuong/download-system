@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// SAFE YT-DLP PATH (FIX ENOENT 100%)
+// YT-DLP PATH SAFE
 // ======================
 function getYtDlp() {
  try {
@@ -23,33 +23,24 @@ function getYtDlp() {
 const YTDLP = getYtDlp()
 
 // ======================
-// JOB STORE (NO 502)
+// CHECK SUPPORT
 // ======================
-const jobs = {}
-
-// ======================
-// QUEUE SYSTEM (SAFE)
-// ======================
-let queue = []
-let running = false
-
-function runQueue() {
- if (running) return
- if (!queue.length) return
-
- running = true
- const job = queue.shift()
-
- Promise.resolve(job())
-  .catch(console.error)
-  .finally(() => {
-   running = false
-   runQueue()
-  })
+function checkSupport(url) {
+ return [
+  "tiktok.com",
+  "instagram.com",
+  "facebook.com",
+  "fb.watch",
+  "twitter.com",
+  "x.com",
+  "youtube.com",
+  "youtu.be",
+  "vimeo.com"
+ ].some(d => url.includes(d))
 }
 
 // ======================
-// DOWNLOAD MP4 (yt-dlp + ffmpeg)
+// DOWNLOAD VIDEO
 // ======================
 function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
@@ -70,13 +61,13 @@ function downloadVideo(url, file) {
 
   yt.on("close", code => {
    if (code === 0) resolve()
-   else reject("yt-dlp failed")
+   else reject("download failed")
   })
  })
 }
 
 // ======================
-// CATBOX UPLOAD
+// UPLOAD CATBOX
 // ======================
 async function uploadCatbox(file) {
  const form = new FormData()
@@ -93,142 +84,66 @@ async function uploadCatbox(file) {
 }
 
 // ======================
-// SUPPORT CHECK
-// ======================
-function checkSupport(url) {
- return [
-  "tiktok.com",
-  "instagram.com",
-  "facebook.com",
-  "fb.watch",
-  "twitter.com",
-  "x.com",
-  "youtube.com",
-  "youtu.be",
-  "vimeo.com"
- ].some(d => url.includes(d))
-}
-
-// ======================
 // ROOT
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
-  name: "PRODUCTION MP4 API",
-  status: "stable",
-  yt_dlp: YTDLP,
+  status: "online",
+  mode: "direct-return",
   endpoints: {
-   download: BASE + "/download?url=",
-   status: BASE + "/status?id=",
-   queue: BASE + "/queue",
-   health: BASE + "/health",
-   test: BASE + "/test"
+   download: BASE + "/download?url="
   }
  })
 })
 
 // ======================
-// DOWNLOAD (QUEUE + NO 502)
+// DIRECT DOWNLOAD (NO QUEUE, NO ID)
 // ======================
-app.get(BASE + "/download", (req, res) => {
+app.get(BASE + "/download", async (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
- if (!url) return res.json({ error: "no url" })
- if (!checkSupport(url)) return res.json({ error: "unsupported" })
 
- const id = Date.now().toString()
- const file = `video_${id}.mp4`
-
- jobs[id] = {
-  status: "processing",
-  result: null
+ if (!url) {
+  return res.json({ status: "error", msg: "no url" })
  }
 
- queue.push(async () => {
-  try {
-   console.log("📥 Download:", url)
+ if (!checkSupport(url)) {
+  return res.json({ status: "error", msg: "unsupported" })
+ }
 
-   await downloadVideo(url, file)
+ const file = `video_${Date.now()}.mp4`
 
-   console.log("☁️ Upload...")
-
-   const result = await uploadCatbox(file)
-
-   fs.unlinkSync(file)
-
-   jobs[id] = {
-    status: "done",
-    result
-   }
-
-  } catch (e) {
-   console.log("❌ ERROR:", e)
-
-   jobs[id] = {
-    status: "error",
-    result: String(e)
-   }
-  }
- })
-
- runQueue()
-
- res.json({
-  status: "queued",
-  id
- })
-})
-
-// ======================
-// STATUS CHECK
-// ======================
-app.get(BASE + "/status", (req, res) => {
- const id = req.query.id
- if (!id) return res.json({ error: "no id" })
-
- res.json(jobs[id] || { error: "not found" })
-})
-
-// ======================
-// QUEUE INFO
-// ======================
-app.get(BASE + "/queue", (req, res) => {
- res.json({
-  waiting: queue.length,
-  running
- })
-})
-
-// ======================
-// HEALTH
-// ======================
-app.get(BASE + "/health", (req, res) => {
- res.json({
-  status: "online",
-  uptime: process.uptime()
- })
-})
-
-// ======================
-// TEST YTDLP
-// ======================
-app.get(BASE + "/test", (req, res) => {
  try {
-  res.json({
-   yt_dlp_path: YTDLP,
-   version: execSync("yt-dlp --version").toString(),
-   ffmpeg: execSync("ffmpeg -version").toString().split("\n")[0]
+  console.log("📥 Download:", url)
+
+  await downloadVideo(url, file)
+
+  console.log("☁️ Upload...")
+
+  const result = await uploadCatbox(file)
+
+  fs.unlinkSync(file)
+
+  return res.json({
+   status: "success",
+   url: result
   })
- } catch (e) {
-  res.json({ error: String(e) })
+
+ } catch (err) {
+  console.log("❌ ERROR:", err)
+
+  if (fs.existsSync(file)) fs.unlinkSync(file)
+
+  return res.json({
+   status: "error",
+   message: String(err)
+  })
  }
 })
 
 // ======================
 app.listen(PORT, () => {
- console.log("━━━━━━━━━━━━━━━━━━━━")
- console.log("🚀 PRODUCTION API READY")
- console.log("🔧 yt-dlp:", YTDLP)
+ console.log("━━━━━━━━━━━━━━━━")
+ console.log("🚀 DIRECT API MODE")
  console.log("📥 /home/api/download?url=")
- console.log("📊 /home/api/status?id=")
- console.log("━━━━━━━━━━━━━━━━━━━━")
+ console.log("━━━━━━━━━━━━━━━━")
 })
