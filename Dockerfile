@@ -1,7 +1,10 @@
 FROM node:18
 
-# Cài ffmpeg trong container (KHÔNG dùng apt trên Render nữa)
-RUN apt-get update && apt-get install -y ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg curl
+
+# install yt-dlp đúng cách
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+ && chmod a+rx /usr/local/bin/yt-dlp
 
 WORKDIR /app
 
@@ -10,6 +13,4 @@ RUN npm install
 
 COPY . .
 
-EXPOSE 3000
-
-CMD ["node", "api.js"]
+CMD ["node", "server.js"]
