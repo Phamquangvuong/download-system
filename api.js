@@ -2,8 +2,7 @@ const express = require("express")
 const fs = require("fs")
 const axios = require("axios")
 const FormData = require("form-data")
-const { spawn } = require("child_process")
-const { execSync } = require("child_process")
+const { spawn, execSync } = require("child_process")
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -11,42 +10,47 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// FIND YT-DLP AUTO PATH (FIX ENOENT)
+// SAFE YT-DLP PATH (FIX ENOENT 100%)
 // ======================
 function getYtDlpPath() {
  try {
-  const path = execSync("which yt-dlp").toString().trim()
-  if (path) return path
+  const p = execSync("which yt-dlp").toString().trim()
+  if (p) return p
  } catch (e) {}
 
- return "yt-dlp" // fallback
+ return "/usr/local/bin/yt-dlp"
 }
 
 const YTDLP = getYtDlpPath()
 
 // ======================
-// QUEUE SYSTEM SAFE
+// JOB STORAGE (NO 502 ANYMORE)
+// ======================
+const jobs = {}
+
+// ======================
+// QUEUE (SINGLE WORKER SAFE)
 // ======================
 let queue = []
 let running = false
 
-function processQueue() {
+function runQueue() {
  if (running) return
  if (!queue.length) return
 
- const job = queue.shift()
  running = true
+ const job = queue.shift()
 
  Promise.resolve(job())
   .catch(console.error)
   .finally(() => {
    running = false
-   processQueue()
+   runQueue()
   })
 }
 
 // ======================
-// DOWNLOAD MP4 (FIXED)
+// DOWNLOAD FUNCTION
 // ======================
 function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
@@ -63,6 +67,8 @@ function downloadVideo(url, file) {
   yt.stdout.on("data", d => process.stdout.write(d))
   yt.stderr.on("data", d => process.stdout.write(d))
 
+  yt.on("error", reject)
+
   yt.on("close", code => {
    if (code === 0) resolve()
    else reject("yt-dlp failed")
@@ -71,7 +77,7 @@ function downloadVideo(url, file) {
 }
 
 // ======================
-// CATBOX UPLOAD
+// UPLOAD CATBOX
 // ======================
 async function uploadCatbox(file) {
  const form = new FormData()
@@ -109,12 +115,12 @@ function checkSupport(url) {
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
-  name: "MP4 API SYSTEM",
-  status: "online",
-  yt_dlp_path: YTDLP,
+  name: "PRODUCTION MP4 API",
+  status: "stable",
+  yt_dlp: YTDLP,
   endpoints: {
    download: BASE + "/download?url=",
-   support: BASE + "/support",
+   status: BASE + "/status?id=",
    queue: BASE + "/queue",
    health: BASE + "/health"
   }
@@ -122,17 +128,22 @@ app.get(BASE, (req, res) => {
 })
 
 // ======================
-// DOWNLOAD
+// DOWNLOAD (NO HANG REQUEST)
 // ======================
 app.get(BASE + "/download", (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
+ if (!url) return res.json({ error: "no url" })
+ if (!checkSupport(url)) return res.json({ error: "unsupported" })
 
- if (!url) return res.json({ status: "error", msg: "no url" })
- if (!checkSupport(url)) return res.json({ status: "error", msg: "unsupported" })
+ const id = Date.now().toString()
+ const file = `video_${id}.mp4`
 
- const file = `video_${Date.now()}.mp4`
+ jobs[id] = {
+  status: "processing",
+  result: null
+ }
 
- const job = async () => {
+ queue.push(async () => {
   try {
    console.log("📥 Download:", url)
 
@@ -144,48 +155,42 @@ app.get(BASE + "/download", (req, res) => {
 
    fs.unlinkSync(file)
 
-   res.json({
-    status: "success",
-    url: result
-   })
+   jobs[id] = {
+    status: "done",
+    result
+   }
 
   } catch (e) {
    console.log("❌ ERROR:", e)
-   res.json({
+
+   jobs[id] = {
     status: "error",
-    message: String(e)
-   })
+    result: String(e)
+   }
   }
- }
+ })
 
- queue.push(job)
- processQueue()
-})
+ runQueue()
 
-// ======================
-// SUPPORT
-// ======================
-app.get(BASE + "/support", (req, res) => {
+ // ⚡ trả ngay (fix 502 forever)
  res.json({
-  supported: [
-   "tiktok",
-   "instagram",
-   "facebook",
-   "twitter",
-   "youtube",
-   "vimeo"
-  ],
-  features: {
-   mp4: true,
-   ffmpeg: true,
-   yt_dlp: true,
-   queue: true
-  }
+  status: "queued",
+  id
  })
 })
 
 // ======================
-// QUEUE
+// CHECK STATUS
+// ======================
+app.get(BASE + "/status", (req, res) => {
+ const id = req.query.id
+ if (!id) return res.json({ error: "no id" })
+
+ res.json(jobs[id] || { error: "not found" })
+})
+
+// ======================
+// QUEUE INFO
 // ======================
 app.get(BASE + "/queue", (req, res) => {
  res.json({
@@ -199,16 +204,17 @@ app.get(BASE + "/queue", (req, res) => {
 // ======================
 app.get(BASE + "/health", (req, res) => {
  res.json({
-  status: "online",
+  status: "ok",
   uptime: process.uptime()
  })
 })
 
 // ======================
 app.listen(PORT, () => {
- console.log("━━━━━━━━━━━━━━━━")
- console.log("🚀 MP4 API READY")
+ console.log("━━━━━━━━━━━━━━━━━━━━")
+ console.log("🚀 PRODUCTION API READY")
  console.log("🔧 yt-dlp:", YTDLP)
  console.log("📥 /home/api/download?url=")
- console.log("━━━━━━━━━━━━━━━━")
+ console.log("📊 /home/api/status?id=")
+ console.log("━━━━━━━━━━━━━━━━━━━━")
 })
