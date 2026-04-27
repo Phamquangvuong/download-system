@@ -7,6 +7,6 @@ services:
 
     buildCommand: npm install
 
-    startCommand: node server.js
+    startCommand: node api.js
 
     autoDeploy: true
