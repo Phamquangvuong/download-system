@@ -1,17 +1,19 @@
 FROM node:18
 
-# Install tools
+# Install system tools
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     python3 \
-    python3-pip
+    python3-pip \
+    ca-certificates
 
-# Install yt-dlp chuẩn nhất
-RUN pip3 install yt-dlp
+# Install yt-dlp (latest stable)
+RUN pip3 install --no-cache-dir yt-dlp
 
-# đảm bảo path
-RUN ln -s /usr/local/bin/yt-dlp /usr/bin/yt-dlp || true
+# Verify tools
+RUN ffmpeg -version
+RUN yt-dlp --version
 
 WORKDIR /app
 
