@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000
 const BASE = "/home/api"
 
 // ======================
-// QUEUE SYSTEM
+// QUEUE SAFE
 // ======================
 let queue = []
 let running = false
@@ -23,7 +23,7 @@ function processQueue() {
  running = true
 
  Promise.resolve(job())
-  .catch(err => console.log("QUEUE ERROR:", err))
+  .catch(console.error)
   .finally(() => {
    running = false
    processQueue()
@@ -31,16 +31,9 @@ function processQueue() {
 }
 
 // ======================
-// CLEAN URL (FIX ENCODE ISSUE)
+// DOWNLOAD MP4 (YT-DLP + FFMPEG)
 // ======================
-function getUrl(req) {
- return decodeURIComponent(req.query.url || "")
-}
-
-// ======================
-// DOWNLOAD (yt-dlp)
-// ======================
-function download(url, file) {
+function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
   const yt = spawn("yt-dlp", [
    "-f", "bv*+ba/b",
@@ -50,7 +43,10 @@ function download(url, file) {
    "--retries", "10",
    "-o", file,
    url
-  ], { stdio: "inherit" })
+  ])
+
+  yt.stdout.on("data", d => process.stdout.write(d))
+  yt.stderr.on("data", d => process.stdout.write(d))
 
   yt.on("close", code => {
    if (code === 0) resolve()
@@ -62,7 +58,7 @@ function download(url, file) {
 // ======================
 // UPLOAD CATBOX
 // ======================
-async function uploadCatbox(file) {
+async function upload(file) {
  const form = new FormData()
  form.append("reqtype", "fileupload")
  form.append("fileToUpload", fs.createReadStream(file))
@@ -77,9 +73,9 @@ async function uploadCatbox(file) {
 }
 
 // ======================
-// SUPPORT CHECK
+// SUPPORT
 // ======================
-function checkSupport(url) {
+function check(url) {
  return [
   "tiktok.com",
   "instagram.com",
@@ -87,68 +83,61 @@ function checkSupport(url) {
   "fb.watch",
   "twitter.com",
   "x.com",
-  "vimeo.com",
   "youtube.com",
-  "youtu.be"
+  "youtu.be",
+  "vimeo.com"
  ].some(d => url.includes(d))
 }
 
 // ======================
-// ROOT API
+// ROOT
 // ======================
 app.get(BASE, (req, res) => {
  res.json({
-  name: "FULL VIDEO API SYSTEM",
-  base: BASE,
+  name: "MP4 DOWNLOAD API",
+  status: "online",
   endpoints: {
    download: BASE + "/download?url=",
    support: BASE + "/support",
    queue: BASE + "/queue",
    health: BASE + "/health"
-  },
-  status: "online"
+  }
  })
 })
 
 // ======================
-// DOWNLOAD ROUTE
+// DOWNLOAD MP4 (MAIN)
 // ======================
 app.get(BASE + "/download", (req, res) => {
- const url = getUrl(req)
+ const url = decodeURIComponent(req.query.url || "")
 
- if (!url) {
-  return res.json({ status: "error", message: "no url" })
- }
+ if (!url) return res.json({ status: "error", msg: "no url" })
+ if (!check(url)) return res.json({ status: "error", msg: "unsupported" })
 
- if (!checkSupport(url)) {
-  return res.json({ status: "error", message: "unsupported platform" })
- }
-
- const file = "video_" + Date.now() + ".mp4"
+ const file = `video_${Date.now()}.mp4`
 
  const job = async () => {
   try {
    console.log("📥 Download:", url)
 
-   await download(url, file)
+   await downloadVideo(url, file)
 
    console.log("☁️ Uploading...")
 
-   const catbox = await uploadCatbox(file)
+   const result = await upload(file)
 
    fs.unlinkSync(file)
 
    res.json({
     status: "success",
-    url: catbox
+    url: result
    })
 
-  } catch (err) {
-   console.log("❌ ERROR:", err)
-
+  } catch (e) {
+   console.log("❌ ERROR:", e)
    res.json({
     status: "error",
-    message: String(err)
+    message: String(e)
    })
   }
  }
@@ -158,7 +147,7 @@ app.get(BASE + "/download", (req, res) => {
 })
 
 // ======================
-// SUPPORT API
+// SUPPORT
 // ======================
 app.get(BASE + "/support", (req, res) => {
  res.json({
@@ -167,22 +156,20 @@ app.get(BASE + "/support", (req, res) => {
    "instagram",
    "facebook",
    "twitter",
-   "x",
-   "vimeo",
-   "youtube"
+   "youtube",
+   "vimeo"
   ],
   features: {
-   download: true,
-   queue: true,
-   ffmpeg: true,
+   mp4: true,
+   ffmpeg_merge: true,
    yt_dlp: true,
-   catbox: true
+   queue: true
   }
  })
 })
 
 // ======================
-// QUEUE STATUS
+// QUEUE
 // ======================
 app.get(BASE + "/queue", (req, res) => {
  res.json({
@@ -202,14 +189,7 @@ app.get(BASE + "/health", (req, res) => {
 })
 
 // ======================
-// START SERVER
-// ======================
 app.listen(PORT, () => {
- console.log("━━━━━━━━━━━━━━━━━━━━")
- console.log("🚀 FULL API RUNNING")
- console.log("📥 /home/api/download?url=")
- console.log("📚 /home/api/support")
- console.log("📦 /home/api/queue")
- console.log("❤️ /home/api/health")
- console.log("━━━━━━━━━━━━━━━━━━━━")
+ console.log("🚀 MP4 API RUNNING")
+ console.log(BASE + "/download?url=")
 })
