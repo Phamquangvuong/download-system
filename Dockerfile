@@ -1,10 +1,17 @@
 FROM node:18
 
-RUN apt-get update && apt-get install -y ffmpeg curl
+# Install tools
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    python3 \
+    python3-pip
 
-# install yt-dlp đúng cách
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
- && chmod a+rx /usr/local/bin/yt-dlp
+# Install yt-dlp chuẩn nhất
+RUN pip3 install yt-dlp
+
+# đảm bảo path
+RUN ln -s /usr/local/bin/yt-dlp /usr/bin/yt-dlp || true
 
 WORKDIR /app
 
@@ -13,4 +20,6 @@ RUN npm install
 
 COPY . .
 
-CMD ["node", "server.js"]
+EXPOSE 3000
+
+CMD ["node", "api.js"]
