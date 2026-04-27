@@ -12,24 +12,23 @@ const BASE = "/home/api"
 // ======================
 // SAFE YT-DLP PATH (FIX ENOENT 100%)
 // ======================
-function getYtDlpPath() {
+function getYtDlp() {
  try {
-  const p = execSync("which yt-dlp").toString().trim()
-  if (p) return p
- } catch (e) {}
-
- return "/usr/local/bin/yt-dlp"
+  return execSync("which yt-dlp").toString().trim()
+ } catch {
+  return "yt-dlp"
+ }
 }
 
-const YTDLP = getYtDlpPath()
+const YTDLP = getYtDlp()
 
 // ======================
-// JOB STORAGE (NO 502 ANYMORE)
+// JOB STORE (NO 502)
 // ======================
 const jobs = {}
 
 // ======================
-// QUEUE (SINGLE WORKER SAFE)
+// QUEUE SYSTEM (SAFE)
 // ======================
 let queue = []
 let running = false
@@ -50,7 +49,7 @@ function runQueue() {
 }
 
 // ======================
-// DOWNLOAD FUNCTION
+// DOWNLOAD MP4 (yt-dlp + ffmpeg)
 // ======================
 function downloadVideo(url, file) {
  return new Promise((resolve, reject) => {
@@ -77,7 +76,7 @@ function downloadVideo(url, file) {
 }
 
 // ======================
-// UPLOAD CATBOX
+// CATBOX UPLOAD
 // ======================
 async function uploadCatbox(file) {
  const form = new FormData()
@@ -122,13 +121,14 @@ app.get(BASE, (req, res) => {
    download: BASE + "/download?url=",
    status: BASE + "/status?id=",
    queue: BASE + "/queue",
-   health: BASE + "/health"
+   health: BASE + "/health",
+   test: BASE + "/test"
   }
  })
 })
 
 // ======================
-// DOWNLOAD (NO HANG REQUEST)
+// DOWNLOAD (QUEUE + NO 502)
 // ======================
 app.get(BASE + "/download", (req, res) => {
  const url = decodeURIComponent(req.query.url || "")
@@ -172,7 +172,6 @@ app.get(BASE + "/download", (req, res) => {
 
  runQueue()
 
- // ⚡ trả ngay (fix 502 forever)
  res.json({
   status: "queued",
   id
@@ -180,7 +179,7 @@ app.get(BASE + "/download", (req, res) => {
 })
 
 // ======================
-// CHECK STATUS
+// STATUS CHECK
 // ======================
 app.get(BASE + "/status", (req, res) => {
  const id = req.query.id
@@ -204,9 +203,24 @@ app.get(BASE + "/queue", (req, res) => {
 // ======================
 app.get(BASE + "/health", (req, res) => {
  res.json({
-  status: "ok",
+  status: "online",
   uptime: process.uptime()
  })
+})
+
+// ======================
+// TEST YTDLP
+// ======================
+app.get(BASE + "/test", (req, res) => {
+ try {
+  res.json({
+   yt_dlp_path: YTDLP,
+   version: execSync("yt-dlp --version").toString(),
+   ffmpeg: execSync("ffmpeg -version").toString().split("\n")[0]
+  })
+ } catch (e) {
+  res.json({ error: String(e) })
+ }
 })
 
 // ======================
