@@ -3,14 +3,17 @@ FROM node:18
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
-    python3 \
-    python3-pip \
     ca-certificates
 
-RUN pip3 install --no-cache-dir yt-dlp
+# 🔥 INSTALL YT-DLP BINARY (KHÔNG DÙNG PIP)
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp
 
-# FIX PATH chuẩn render
-ENV PATH="/root/.local/bin:$PATH"
+RUN chmod a+rx /usr/local/bin/yt-dlp
+
+# verify
+RUN yt-dlp --version
+RUN ffmpeg -version
 
 WORKDIR /app
 
